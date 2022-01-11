@@ -1,5 +1,5 @@
 {
-    "name": "boostsales/banktrasfer",
+    "name": "boostsales/banktransfer",
     "description": "Magento 2 module",
     "require": {
         "php": "~7.2",

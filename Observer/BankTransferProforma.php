@@ -9,10 +9,10 @@ use Magento\Payment\Helper\Data as PaymentHelper;
 use Magento\Framework\Translate\Inline\StateInterface;
 use Fooman\PrintOrderPdf\Model\Pdf\Order;
 use Psr\Log\LoggerInterface;
+use Boostsales\BankTransfer\Model\Mail\Template\TransportBuilder;
 
 class BankTransferProforma implements ObserverInterface
 {
-
     const XML_PATH_EMAIL_IDENTITY = 'trans_email/ident_general/email';
     const XML_PATH_EMAIL_NAME = 'trans_email/ident_general/name';
 
@@ -22,11 +22,13 @@ class BankTransferProforma implements ObserverInterface
     protected $_scopeConfig;
     protected $_pdf;
     protected $_logger;
+    protected $transportBuilder;
 
     public function __construct(Template $template, PaymentHelper $paymentHelper, StateInterface $state,
         \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
         Order $pdf,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        TransportBuilder $transportBuilder
     )
 
     {
@@ -36,6 +38,7 @@ class BankTransferProforma implements ObserverInterface
         $this->_scopeConfig = $scopeConfig;
         $this->_pdf = $pdf;
         $this->_logger = $logger;
+        $this->transportBuilder = $transportBuilder;
     }
 
     public function execute(Observer $observer){
@@ -57,7 +60,7 @@ class BankTransferProforma implements ObserverInterface
                 $from = ['email' => $fromEmail, 'name' => $fromName];
 
                 $this->inlineTranslation->suspend();
-
+                $storeCode = strtoupper($order->getStore()->getCode());
                 $emailtemplate = $this->_template->load($storeCode.' Proforma Invoice', 'template_code');
                 $templateOptions = [
                     'area' => \Magento\Framework\App\Area::AREA_FRONTEND,
@@ -77,7 +80,7 @@ class BankTransferProforma implements ObserverInterface
                             ->setTemplateVars($templateVars)
                             ->setFrom($from)
                             ->addTo($customerEmail)
-                            ->addAttachment($file)
+                            ->addAttachment($file,'proforma-invoice.pdf')
                             ->getTransport();
 
                 $transport->sendMessage();

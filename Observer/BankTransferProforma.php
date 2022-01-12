@@ -10,6 +10,8 @@ use Magento\Framework\Translate\Inline\StateInterface;
 use Fooman\PrintOrderPdf\Model\Pdf\Order;
 use Psr\Log\LoggerInterface;
 use Boostsales\BankTransfer\Model\Mail\Template\TransportBuilder;
+use Fooman\EmailAttachments\Model\AttachmentFactory;
+use Fooman\EmailAttachments\Model\Api\AttachmentContainerInterface as ContainerInterface;
 
 class BankTransferProforma implements ObserverInterface
 {
@@ -23,12 +25,16 @@ class BankTransferProforma implements ObserverInterface
     protected $_pdf;
     protected $_logger;
     protected $transportBuilder;
+    protected $attachmentFactory;
+    protected $attachmentContainer;
 
     public function __construct(Template $template, PaymentHelper $paymentHelper, StateInterface $state,
         \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
         Order $pdf,
         LoggerInterface $logger,
-        TransportBuilder $transportBuilder
+        TransportBuilder $transportBuilder,
+        AttachmentFactory $attachmentFactory,
+        ContainerInterface $attachmentContainer
     )
 
     {
@@ -39,6 +45,8 @@ class BankTransferProforma implements ObserverInterface
         $this->_pdf = $pdf;
         $this->_logger = $logger;
         $this->transportBuilder = $transportBuilder;
+        $this->attachmentFactory = $attachmentFactory;
+        $this->attachmentContainer = $attachmentContainer;
     }
 
     public function execute(Observer $observer){
@@ -56,7 +64,7 @@ class BankTransferProforma implements ObserverInterface
         }
         $fromEmail = $this->_scopeConfig->getValue(self::XML_PATH_EMAIL_IDENTITY, $storeScope);
         $fromName = $this->_scopeConfig->getValue(self::XML_PATH_EMAIL_NAME, $storeScope);
-        try {
+        
                 $from = ['email' => $fromEmail, 'name' => $fromName];
 
                 $this->inlineTranslation->suspend();
@@ -75,14 +83,22 @@ class BankTransferProforma implements ObserverInterface
                 $pdfattachment = $this->_pdf->getpdf([$order]);
                 $file = $pdfattachment->render(false,null,false,false,true);
 
-                $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate, $storeScope)
+                $attachment = $this->attachmentFactory->create(
+                    [
+                        'content' => $file,
+                        'mimeType' => 'application/pdf',
+                        'fileName' => 'performa-invoice.pdf'
+                    ]
+                );
+                $this->attachmentContainer->addAttachment($attachment);
+                
+                $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
                             ->setTemplateOptions($templateOptions)
                             ->setTemplateVars($templateVars)
                             ->setFrom($from)
                             ->addTo($customerEmail)
-                            ->addAttachment($file,'proforma-invoice.pdf')
                             ->getTransport();
-
+        try {
                 $transport->sendMessage();
                 $this->inlineTranslation->resume();
         } catch (\Exception $e) {

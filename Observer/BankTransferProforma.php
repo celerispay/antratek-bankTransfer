@@ -83,21 +83,53 @@ class BankTransferProforma implements ObserverInterface
                 $pdfattachment = $this->_pdf->getpdf([$order]);
                 $file = $pdfattachment->render(false,null,false,false,true);
 
-                $attachment = $this->attachmentFactory->create(
+               /*  $attachment = $this->attachmentFactory->create(
                     [
                         'content' => $file,
                         'mimeType' => 'application/pdf',
                         'fileName' => 'performa-invoice.pdf'
                     ]
                 );
-                $this->attachmentContainer->addAttachment($attachment);
+                $this->attachmentContainer->addAttachment($attachment); */
+
+                $attachment = $this->transportBuilder->addAttachment(
+                        file_get_contents($pdfattachment),
+                        'performainvoice.pdf',
+                        'application/pdf'
+                );
+
+                $message = $transport->getMessage();
+                $body = \Zend\Mail\Message::fromString($message->getRawMessage())->getBody();
+                $body = \Zend_Mime_Decode::decodeQuotedPrintable($body);
+                $html = '';
+
+                if ($body instanceof \Zend\Mime\Message) {
+                    $html = $body->generateMessage(\Zend\Mail\Headers::EOL);
+                } elseif ($body instanceof \Magento\Framework\Mail\MimeMessage) {
+                    $html = (string) $body->getMessage();
+                } elseif ($body instanceof \Magento\Framework\Mail\EmailMessage) {
+                    $html = (string) $body->getBodyText();
+                } else {
+                    $html = (string) $body;
+                }
+
+                $htmlPart = new \Zend\Mime\Part($html);
+                $htmlPart->setCharset('utf-8');
+                $htmlPart->setEncoding(\Zend_Mime::ENCODING_QUOTEDPRINTABLE);
+                $htmlPart->setDisposition(\Zend_Mime::DISPOSITION_INLINE);
+                $htmlPart->setType(\Zend_Mime::TYPE_HTML);
+                $parts = [$htmlPart, $attachment];
+
+                $bodyPart = new \Zend\Mime\Message();
+                $bodyPart->setParts($parts);
+                $message->setBody($bodyPart);
                 
-                $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
+                /* $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
                             ->setTemplateOptions($templateOptions)
                             ->setTemplateVars($templateVars)
                             ->setFrom($from)
                             ->addTo($customerEmail)
-                            ->getTransport();
+                            ->getTransport(); */
         try {
                 $transport->sendMessage();
                 $this->inlineTranslation->resume();

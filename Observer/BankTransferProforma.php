@@ -53,7 +53,7 @@ class BankTransferProforma implements ObserverInterface
 
         $order = $observer->getEvent()->getOrder();
         $paymentMethod = $order->getPayment()->getMethod();
-        if(!$paymentMethod == "banktransfer"){
+        if($paymentMethod != "banktransfer"){
             return $this;
         }
 
@@ -79,7 +79,16 @@ class BankTransferProforma implements ObserverInterface
                     'invoice' => '',
                     'store' => $order->getStore(),
                     'payment_html' => $this->paymentHelper->getInfoBlockHtml($order->getPayment(), $order->getStore()->getStoreId()),
-                ];
+	    ];
+		$transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
+                            ->setTemplateOptions($templateOptions)
+                            ->setTemplateVars($templateVars)
+                            ->setFrom($from)
+                            ->addTo($customerEmail)
+                            ->getTransport();
+		
+	//	$transport = $this->transportBuilder->getTransport();
+	
                 $pdfattachment = $this->_pdf->getpdf([$order]);
                 $file = $pdfattachment->render(false,null,false,false,true);
 
@@ -93,7 +102,7 @@ class BankTransferProforma implements ObserverInterface
                 $this->attachmentContainer->addAttachment($attachment); */
 
                 $attachment = $this->transportBuilder->addAttachment(
-                        file_get_contents($pdfattachment),
+                         $file,
                         'performainvoice.pdf',
                         'application/pdf'
                 );

@@ -27,6 +27,8 @@ class BankTransferProforma implements ObserverInterface
     protected $transportBuilder;
     protected $attachmentFactory;
     protected $attachmentContainer;
+    protected $orderDocumentFactory;
+    protected $pdfRenderer;
 
     public function __construct(
         Template $template,
@@ -37,7 +39,9 @@ class BankTransferProforma implements ObserverInterface
         LoggerInterface $logger,
         TransportBuilder $transportBuilder,
         AttachmentFactory $attachmentFactory,
-        ContainerInterface $attachmentContainer
+        ContainerInterface $attachmentContainer,
+	\Fooman\PdfCore\Model\PdfRenderer $pdfRenderer,
+        \Fooman\PdfCustomiser\Block\OrderFactory $orderDocumentFactory
     ) {
         $this->_template = $template;
         $this->paymentHelper = $paymentHelper;
@@ -48,6 +52,8 @@ class BankTransferProforma implements ObserverInterface
         $this->transportBuilder = $transportBuilder;
         $this->attachmentFactory = $attachmentFactory;
         $this->attachmentContainer = $attachmentContainer;
+    	$this->orderDocumentFactory = $orderDocumentFactory;
+        $this->pdfRenderer = $pdfRenderer;	
     }
 
     public function execute(Observer $observer)
@@ -71,7 +77,8 @@ class BankTransferProforma implements ObserverInterface
 
         $this->inlineTranslation->suspend();
         $storeCode = strtoupper($order->getStore()->getCode());
-        $emailtemplate = $this->_template->load($storeCode . ' Proforma Invoice', 'template_code');
+       # $emailtemplate = $this->_template->load(47, 'template_id');
+	$emailtemplate = $this->_template->load($storeCode . ' Proforma Invoice', 'template_code');
         $templateOptions = [
             'area' => \Magento\Framework\App\Area::AREA_FRONTEND,
             'store' => $order->getStore()->getId()
@@ -81,11 +88,20 @@ class BankTransferProforma implements ObserverInterface
             'invoice' => '',
             'store' => $order->getStore(),
             'payment_html' => $this->paymentHelper->getInfoBlockHtml($order->getPayment(), $order->getStore()->getStoreId()),
-        ];
-
-        $pdfattachment = $this->_pdf->getpdf([$order]);
-        $file = $pdfattachment->render(false, null, false, false, true);
-
+   	 ];
+//	$objectManager = \Magento\Framework\App\ObjectManager::getInstance();
+//	$fooman = $objectManager->get(get_parent_class($this->_pdf));
+//	var_dump(get_class($fooman));
+//	$pdfattachment = $fooman->getFoomanPdf([$order]);
+//	$file = $pdfattachment->render(false, null, false, false, true);
+	
+	  if ($order) {
+                 $document = $this->orderDocumentFactory->create(
+                         ['data' => ['order' => $order]]
+                 );
+                 $this->pdfRenderer->addDocument($document);
+                 $fileOrder = $this->pdfRenderer->getPdfAsString();
+         }
         // $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
         //     ->setTemplateOptions($templateOptions)
         //     ->setTemplateVars($templateVars)
@@ -142,13 +158,20 @@ class BankTransferProforma implements ObserverInterface
                             ->setFrom($from)
                             ->addTo($customerEmail)
                             ->getTransport(); */
+	 $filename = 'Proforma Invoice.pdf';
+        if($storeCode == 'DE')
+         $filename = 'Proformarechnung.pdf';
+        if($storeCode == 'NL')
+         $filename = 'Proforma factuur.pdf';
+
         try {
             $transport = $this->transportBuilder->setTemplateIdentifier($emailtemplate->getId(), $storeScope)
                 ->setTemplateOptions($templateOptions)
                 ->setTemplateVars($templateVars)
-                ->addAttachment($file, 'proformaInvoice', 'application/pdf')
                 ->setFrom($from)
                 ->addTo($customerEmail)
+		->addBcc('info@antratek.com')
+   	        ->addAttachment($fileOrder, $filename, 'application/pdf')
                 ->getTransport();
 
             $transport->sendMessage();
